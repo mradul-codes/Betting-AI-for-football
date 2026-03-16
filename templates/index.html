@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NeuralBet AI Dashboard</title>
+    <style>
+        :root { --bg: #0d1117; --card: #161b22; --accent: #58a6ff; --text: #c9d1d9; --success: #238636; --warning: #d29922; --danger: #da3633; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; }
+        .sidebar { width: 280px; background: var(--card); height: 100vh; padding: 20px; border-right: 1px solid #30363d; position: fixed; }
+        .main { margin-left: 320px; padding: 40px; width: calc(100% - 320px); }
+        .match-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .match-card { background: var(--card); border: 1px solid #30363d; padding: 20px; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+        .match-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+        .result-box { margin-top: 40px; padding: 30px; border: 2px solid var(--accent); border-radius: 12px; display: none; background: #010409; }
+        .odds-row { display: flex; justify-content: space-between; margin-top: 15px; font-size: 14px; }
+        
+        /* Naya Verdict Style */
+        .verdict-box { 
+            margin-top: 25px; 
+            padding: 20px; 
+            border-radius: 10px; 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 20px;
+            border: 1px solid #30363d;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>🧠 NeuralBet AI</h2>
+    <p>API Status: <span style="color:#238636">● Online</span></p>
+    <div style="margin-top:40px;">
+        <label>Investment Budget (₹)</label>
+        <input type="number" id="budgetInput" value="1000" style="width:100%; padding:12px; margin-top:10px; background:#0d1117; color:white; border:1px solid #30363d; border-radius:6px;">
+    </div>
+</div>
+
+<div class="main">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
+        <h1>Live Football Matches</h1>
+        <button style="background:var(--accent); color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer;" onclick="location.reload()">Refresh Matches</button>
+    </div>
+
+    <div class="match-grid">
+        {% for match in matches %}
+        <div class="match-card" onclick="analyzeMatch('{{ match.home_team }}', '{{ match.away_team }}', {{ match.h_odd }}, {{ match.d_odd }}, {{ match.a_odd }})">
+            <div style="font-weight:bold; font-size:18px; color:white;">{{ match.home_team }} vs {{ match.away_team }}</div>
+            <div class="odds-row">
+                <span>H: <b style="color:var(--accent)">{{ match.h_odd }}</b></span>
+                <span>D: <b style="color:var(--accent)">{{ match.d_odd }}</b></span>
+                <span>A: <b style="color:var(--accent)">{{ match.a_odd }}</b></span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="resultArea" class="result-box">
+        <h2 id="mTitle" style="text-align:center; color:white; margin-bottom:30px;">Analysis</h2>
+        
+        <div style="display:flex; justify-content:space-around; text-align:center;">
+            <div><p>HOME</p><h1 id="pH" style="color:var(--success)">0%</h1></div>
+            <div><p>DRAW</p><h1 id="pD" style="color:var(--warning)">0%</h1></div>
+            <div><p>AWAY</p><h1 id="pA" style="color:var(--danger)">0%</h1></div>
+        </div>
+
+        <div style="background:#161b22; padding:25px; border-radius:12px; margin-top:30px; border:1px solid #30363d;">
+            <h3 style="margin-top:0;">📊 INVESTMENT PLAN</h3>
+            <p id="invH" style="font-size:18px;">Account 1: ₹0</p>
+            <p id="invA" style="font-size:18px;">Account 2: ₹0</p>
+            <hr style="border:0.5px solid #30363d; margin:15px 0;">
+            <h2 id="prof" style="color:var(--success); margin-bottom:0;">Profit: ₹0</h2>
+        </div>
+
+        <div id="aiVerdict" class="verdict-box"></div>
+    </div>
+</div>
+
+<script>
+async function analyzeMatch(home, away, oh, od, oa) {
+    const budget = document.getElementById('budgetInput').value;
+    const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ home, away, oh, od, oa, budget })
+    });
+    const data = await res.json();
+    
+    document.getElementById('mTitle').innerText = home + " vs " + away;
+    document.getElementById('pH').innerText = data.p_home + "%";
+    document.getElementById('pD').innerText = data.p_draw + "%";
+    document.getElementById('pA').innerText = data.p_away + "%";
+    document.getElementById('invH').innerText = `Account 1 (${home}): ₹${data.inv_h}`;
+    document.getElementById('invA').innerText = `Account 2 (${away}): ₹${data.inv_a}`;
+    document.getElementById('prof').innerText = `Profit: ₹${data.profit}`;
+
+    // --- SMART VERDICT LOGIC ---
+    const verdictDiv = document.getElementById('aiVerdict');
+    let verdictText = "";
+    let bgColor = "";
+
+    if (data.profit <= 0) {
+        verdictText = "❌ MAT LAGAO: Is match mein mathematical loss hai.";
+        bgColor = "rgba(218, 54, 51, 0.1)";
+        verdictDiv.style.color = "var(--danger)";
+    } else if (data.p_draw > 38) {
+        verdictText = "⚠️ KHATRA: Draw hone ka chance zyada hai, paise mat lagao.";
+        bgColor = "rgba(210, 153, 34, 0.1)";
+        verdictDiv.style.color = "var(--warning)";
+    } else if (data.p_home > 50) {
+        verdictText = `✅ PAKKA LAGAO: AI Confident hai, ${home} par lagana safe hai.`;
+        bgColor = "rgba(35, 134, 54, 0.1)";
+        verdictDiv.style.color = "var(--success)";
+    } else if (data.p_away > 50) {
+        verdictText = `✅ PAKKA LAGAO: AI Confident hai, ${away} par lagana safe hai.`;
+        bgColor = "rgba(35, 134, 54, 0.1)";
+        verdictDiv.style.color = "var(--success)";
+    } else {
+        verdictText = "⚖️ NEUTRAL: Calculation sahi hai, thoda risk le sakte ho.";
+        bgColor = "rgba(88, 166, 255, 0.1)";
+        verdictDiv.style.color = "var(--accent)";
+    }
+
+    verdictDiv.innerHTML = "🎯 AI VERDICT: " + verdictText;
+    verdictDiv.style.backgroundColor = bgColor;
+    verdictDiv.style.display = 'block';
+    
+    document.getElementById('resultArea').style.display = 'block';
+    window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
+}
+</script>
+</body>
+</html>
